@@ -130,15 +130,15 @@ def validate_candle(candle: Candle) -> Tuple[bool, Optional[str]]:
     if candle.volume != int(candle.volume):
         return False, "VOLUME_NOT_INTEGER"
 
-    if int(candle.volume) < MIN_VOLUME:
-        return False, "VOLUME_ZERO"
+    # if int(candle.volume) < MIN_VOLUME:
+    #     return False, "VOLUME_ZERO"
 
     if not isinstance(candle.number_of_trades, int):
         return False, "NO_OF_TRADES_NOT_INTEGER"
 
-    if candle.mode=="live":
-        if candle.number_of_trades <= 0 or candle.number_of_trades < MIN_N0_OF_TRADES:
-            return False, "NO_OF_TRADES_ZERO or BELOW MINIMUM"
+    # if candle.mode=="live":
+    #     if candle.number_of_trades <= 0 or candle.number_of_trades < MIN_N0_OF_TRADES:
+    #         return False, "NO_OF_TRADES_ZERO or BELOW MINIMUM"
 
 
     # --------------------------------------------------------
