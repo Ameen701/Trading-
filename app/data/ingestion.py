@@ -50,6 +50,7 @@ class AngelWebSocketIngestion:
         feed_token: str,
         symbol_token_map: Dict[str, str],
         builders: Dict[str, CandleBuilder],
+
     ):
         """
         Parameters:
@@ -72,6 +73,15 @@ class AngelWebSocketIngestion:
         self.ws.on_data = self._on_data
         self.ws.on_error = self._on_error
         self.ws.on_close = self._on_close
+       
+        self.token_symbol_map = {v: k for k, v in symbol_token_map.items()}
+        
+        if len(self.token_symbol_map) != len(symbol_token_map):
+            raise ValueError(
+                "Duplicate tokens detected in symbol_token_map. "
+                "Each symbol must have a unique token."
+                )
+
 
     # =========================
     # WebSocket lifecycle
@@ -123,22 +133,23 @@ class AngelWebSocketIngestion:
         """
         Angel SmartAPI V2 tick structure (subset):
 
-        {
-          "tk": "26009",         # symbol token
-          "ltp": 2485.50,        # last traded price
-          "v": 100,              # last traded quantity
-          "eft": 1738224902500,  # exchange feed time (epoch ms)
-          ...
+       {
+       "token": "26009",
+       "last_traded_price": 248550,
+       "last_traded_quantity": 100,
+       "exchange_timestamp": 1738224902500
         }
+
         """
 
         try:
-            symbol_token = message.get("tk")
-            price = message.get("ltp")
-            quantity = message.get("v")
-            exchange_ts = message.get("eft")
+            symbol_token = message.get("token")
+            price = message.get("last_traded_price")
+            quantity = message.get("last_traded_quantity")
+            exchange_ts = message.get("exchange_timestamp")
+           
 
-            if not all([symbol_token, price, quantity, exchange_ts]):
+            if symbol_token is None or price is None or exchange_ts is None:
                 log(
                     "TICK_DROPPED_MISSING_FIELD",
                     layer="ingestion",
@@ -146,6 +157,7 @@ class AngelWebSocketIngestion:
                     raw_message=message,
                 )
                 return
+            price=price/100  # Angel gives price in paise, convert to rupees
 
             symbol = self._symbol_from_token(symbol_token)
             if symbol is None:
@@ -177,7 +189,7 @@ class AngelWebSocketIngestion:
 
             closed_candle = builder.add_tick(
                 price=price,
-                quantity=quantity,
+                quantity=quantity or 1,
                 tick_time=tick_time,
             )
 
@@ -193,7 +205,7 @@ class AngelWebSocketIngestion:
                         "high": closed_candle.high_price,
                         "low": closed_candle.low_price,
                         "close": closed_candle.close_price,
-                        "volume": closed_candle.volume,
+                        "volume_proxy": closed_candle.volume,
                         "tick_count": closed_candle.number_of_trades,
                     },
                 )
@@ -212,7 +224,6 @@ class AngelWebSocketIngestion:
     # =========================
 
     def _symbol_from_token(self, token: str) -> Optional[str]:
-        for symbol, sym_token in self.symbol_token_map.items():
-            if sym_token == token:
-                return symbol
-        return None
+        return self.token_symbol_map.get(token)
+
+

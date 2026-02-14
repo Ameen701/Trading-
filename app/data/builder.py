@@ -27,7 +27,7 @@ class CandleState(Enum):
     DROPPED = "dropped"
 
 
-def get_candle_boundary(tick_time: datetime) -> datetime:
+def get_candle_boundary(tick_time: datetime, timeframe_seconds: int) -> datetime:
     """
     Align tick timestamp to NSE 15-minute boundary.
 
@@ -39,7 +39,8 @@ def get_candle_boundary(tick_time: datetime) -> datetime:
     - Extend to support multiple timeframes
     """
     minute = tick_time.minute
-    aligned_minute = (minute // 15) * 15
+    timeframe_minutes = timeframe_seconds // 60
+    aligned_minute = (minute // timeframe_minutes) * timeframe_minutes
     return tick_time.replace(
         minute=aligned_minute,
         second=0,
@@ -63,8 +64,10 @@ class CandleBuilder:
     ❌ Do NOT mutate closed candles
     """
 
-    def __init__(self, symbol: str):
+    def __init__(self, symbol: str,timeframe: str,timeframe_seconds: int):
         self.symbol = symbol
+        self.timeframe = timeframe
+        self.timeframe_seconds = timeframe_seconds
         self.current_candle: Optional[Candle] = None
         self.state: Optional[CandleState] = None
         self.last_tick_time: Optional[datetime] = None
@@ -73,8 +76,9 @@ class CandleBuilder:
     def add_tick(
         self,
         price: float,
-        quantity: int,
+        
         tick_time: datetime,
+        quantity: int = 1,
     ) -> Optional[Candle]:
         """
         Process a single tick.
@@ -103,8 +107,8 @@ class CandleBuilder:
         if not self._is_market_time(tick_time):
             return None
 
-        boundary = get_candle_boundary(tick_time)
-        candle_end = boundary + timedelta(seconds=TIMEFRAME_SECONDS)
+        boundary = get_candle_boundary(tick_time,self.timeframe_seconds)
+        candle_end = boundary + timedelta(seconds=self.timeframe_seconds)
 
         # ---------- START FIRST CANDLE ----------
         if self.current_candle is None:
@@ -121,19 +125,22 @@ class CandleBuilder:
             self._update_candle(price, quantity)
             return None
 
+        
         # ---------- CLOSE CURRENT CANDLE ----------
         closed_candle = self._close_current_candle()
 
-        # ---------- START NEXT CANDLE ----------
-        new_boundary = get_candle_boundary(tick_time)
+# ---------- START NEXT CANDLE (aligned to THIS tick) ----------
+        new_boundary = get_candle_boundary(tick_time,self.timeframe_seconds)
+        new_end = new_boundary + timedelta(seconds=self.timeframe_seconds)
+
         self._start_new_candle(
             price=price,
             quantity=quantity,
             start_time=new_boundary,
-            end_time=new_boundary + timedelta(seconds=TIMEFRAME_SECONDS),
+            end_time=new_end,
         )
-
         return closed_candle
+
 
     # ==========================================================
     # Internal helpers
@@ -148,16 +155,17 @@ class CandleBuilder:
     ):
         self.current_candle = Candle(
             symbol=self.symbol,
-            timeframe="15m",
+            timeframe=self.timeframe,
             open_price=price,
             high_price=price,
             low_price=price,
             close_price=price,
             volume=quantity,
-            tick_count=1,
-            start_time=start_time,
-            end_time=end_time,
+            number_of_trades=1,
+            open_time=start_time,
+            close_time=end_time,
             is_closed=False,
+            mode="live",
         )
         self.state = CandleState.BUILDING
 
@@ -179,19 +187,36 @@ class CandleBuilder:
         candle = self.current_candle
         candle.is_closed = True
         self.state = CandleState.CLOSED
+        # 🔍 DEBUG: Show candle details BEFORE validation
+        print(f"\n{'='*70}")
+        print(f"🔍 ATTEMPTING TO CLOSE CANDLE: {self.symbol}")
+        print(f"   Time Range: {candle.open_time.strftime('%H:%M:%S')} → {candle.close_time.strftime('%H:%M:%S')}")
+        print(f"   Duration: {candle.close_time - candle.open_time}")
+        print(f"   OHLC: O={candle.open_price:.2f} H={candle.high_price:.2f} L={candle.low_price:.2f} C={candle.close_price:.2f}")
+        print(f"   Volume: {candle.volume} (type: {type(candle.volume).__name__})")
+        print(f"   Number of Trades: {candle.number_of_trades}")
+        print(f"   Mode: {candle.mode}")
+        print(f"   Timeframe: {candle.timeframe}")
+        print(f"   Is Closed: {candle.is_closed}")
+        print(f"   Timezone: open={candle.open_time.tzinfo}, close={candle.close_time.tzinfo}")
+        print(f"{'='*70}")
 
         is_valid, reason = validate_candle(candle)
 
         if is_valid:
+            print(f"✅ VALIDATION PASSED - EMITTING CANDLE\n")
             self.state = CandleState.EMITTED
             emitted = candle
         else:
-            # log_rejection(candle, reason)
+            print(f"❌ VALIDATION FAILED")
+            print(f"   Rejection Reason: {reason}")
+            print(f"   This candle will be DROPPED\n")
             self.state = CandleState.DROPPED
             emitted = None
 
         self.current_candle = None
         return emitted
+
 
     @staticmethod
     def _is_market_time(ts: datetime) -> bool:
