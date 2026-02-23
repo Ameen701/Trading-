@@ -42,10 +42,10 @@ intraday-trading-engine/
 │   ├── roadmap.md
 │   └── current_status.md
 │
-└── tests/
-    ├── README.md
-    ├── unit/
-    └── integration/
+└── test/
+    ├── test_login.py
+    ├── test_live.py
+    └── test_historical.py
 
 
 
@@ -226,17 +226,18 @@ Contains:
 
 ---
 
-## /tests
+## /test
 
-Automated tests.
+Current validation scripts.
 
-### /tests/unit
-Unit tests for individual modules.
+- `test_login.py`: Broker login check
+- `test_live.py`: Live ingestion + persistence wiring check
+- `test_historical.py`: Historical candle fetch check
 
-### /tests/integration
-Integration tests across multiple components.
-
-Tests must not rely on live market data.
+Note:
+- These scripts currently depend on broker credentials and live APIs.
+- A future `/tests` layout for deterministic unit/integration coverage should be
+  introduced as Phase 1 matures.
 
 ---
 
