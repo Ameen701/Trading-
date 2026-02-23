@@ -18,7 +18,7 @@ NOT responsible for:
 - Data fixing or inference
 """
 
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -26,6 +26,7 @@ from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 
 from app.data.builder import CandleBuilder
 from app.data.logger import log
+from app.data.models import Candle
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -50,6 +51,7 @@ class AngelWebSocketIngestion:
         feed_token: str,
         symbol_token_map: Dict[str, str],
         builders: Dict[str, CandleBuilder],
+        on_candle_closed: Optional[Callable[[Candle], None]] = None,
 
     ):
         """
@@ -74,6 +76,9 @@ class AngelWebSocketIngestion:
         self.ws.on_error = self._on_error
         self.ws.on_close = self._on_close
        
+
+        self.on_candle_closed = on_candle_closed
+    
         self.token_symbol_map = {v: k for k, v in symbol_token_map.items()}
         
         if len(self.token_symbol_map) != len(symbol_token_map):
@@ -174,14 +179,14 @@ class AngelWebSocketIngestion:
                 tz=IST,
             )
 
-            log(
+            """log(
                 "TICK_RECEIVED",
                 layer="ingestion",
                 symbol=symbol,
                 price=price,
                 quantity=quantity,
                 tick_time=tick_time.isoformat(),
-            )
+            )"""
 
             builder = self.builders.get(symbol)
             if builder is None:
@@ -209,6 +214,8 @@ class AngelWebSocketIngestion:
                         "tick_count": closed_candle.number_of_trades,
                     },
                 )
+                if self.on_candle_closed:
+                    self.on_candle_closed(closed_candle)
 
         except Exception as exc:
             log(

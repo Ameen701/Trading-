@@ -3,9 +3,10 @@ from zoneinfo import ZoneInfo
 from enum import Enum
 from typing import Optional
 
+
 from app.data.models import Candle
 from app.data.validation import validate_candle
-
+from app.data.logger import log
 
 IST = ZoneInfo("Asia/Kolkata")
 TIMEFRAME_SECONDS = 15 * 60  # Phase-1: 15m only
@@ -187,30 +188,45 @@ class CandleBuilder:
         candle = self.current_candle
         candle.is_closed = True
         self.state = CandleState.CLOSED
-        # 🔍 DEBUG: Show candle details BEFORE validation
-        print(f"\n{'='*70}")
-        print(f"🔍 ATTEMPTING TO CLOSE CANDLE: {self.symbol}")
-        print(f"   Time Range: {candle.open_time.strftime('%H:%M:%S')} → {candle.close_time.strftime('%H:%M:%S')}")
-        print(f"   Duration: {candle.close_time - candle.open_time}")
-        print(f"   OHLC: O={candle.open_price:.2f} H={candle.high_price:.2f} L={candle.low_price:.2f} C={candle.close_price:.2f}")
-        print(f"   Volume: {candle.volume} (type: {type(candle.volume).__name__})")
-        print(f"   Number of Trades: {candle.number_of_trades}")
-        print(f"   Mode: {candle.mode}")
-        print(f"   Timeframe: {candle.timeframe}")
-        print(f"   Is Closed: {candle.is_closed}")
-        print(f"   Timezone: open={candle.open_time.tzinfo}, close={candle.close_time.tzinfo}")
-        print(f"{'='*70}")
+        log(
+            "CANDLE_CLOSE_ATTEMPT",
+            layer="builder",
+            symbol=self.symbol,
+            payload={
+                "start": candle.open_time.isoformat(),
+                "end": candle.close_time.isoformat(),
+                "duration_sec": int((candle.close_time - candle.open_time).total_seconds()),
+                "open": candle.open_price,
+                "high": candle.high_price,
+                "low": candle.low_price,
+                "close": candle.close_price,
+                "volume": candle.volume,
+                "trades": candle.number_of_trades,
+                "mode": candle.mode,
+                "timeframe": candle.timeframe,
+                }
+           )
 
         is_valid, reason = validate_candle(candle)
 
         if is_valid:
-            print(f"✅ VALIDATION PASSED - EMITTING CANDLE\n")
+            
             self.state = CandleState.EMITTED
             emitted = candle
+            log(
+                "CANDLE_EMITTED",
+                layer="builder",
+                symbol=self.symbol,
+                )
+
         else:
-            print(f"❌ VALIDATION FAILED")
-            print(f"   Rejection Reason: {reason}")
-            print(f"   This candle will be DROPPED\n")
+            log(
+                "CANDLE_REJECTED",
+                layer="builder",
+                symbol=self.symbol,
+                payload={"reason": reason},
+                )
+
             self.state = CandleState.DROPPED
             emitted = None
 
