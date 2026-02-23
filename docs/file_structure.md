@@ -239,6 +239,15 @@ Note:
 - A future `/tests` layout for deterministic unit/integration coverage should be
   introduced as Phase 1 matures.
 
+### Transitional note (current repository)
+The repository currently includes temporary validation scripts under `/test/`:
+- `test_login.py`
+- `test_live.py`
+- `test_historical.py`
+
+These are broker-connected validation scripts and should be migrated into the
+`/tests` structure as deterministic tests over time.
+
 ---
 
 ## Placement Rule (Important)
