@@ -238,6 +238,15 @@ Integration tests across multiple components.
 
 Tests must not rely on live market data.
 
+### Transitional note (current repository)
+The repository currently includes temporary validation scripts under `/test/`:
+- `test_login.py`
+- `test_live.py`
+- `test_historical.py`
+
+These are broker-connected validation scripts and should be migrated into the
+`/tests` structure as deterministic tests over time.
+
 ---
 
 ## Placement Rule (Important)
